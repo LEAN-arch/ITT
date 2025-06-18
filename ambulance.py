@@ -15,15 +15,19 @@ st.set_page_config(
 # --- Data Caching and Generation ---
 @st.cache_data
 def load_data():
-    """Generates realistic mock data for demonstration."""
-    # Central point for Tijuana
-    lat_center, lon_center = 32.5149, -117.0382
+    """
+    Generates realistic mock data constrained to the Tijuana, Mexico area.
+    """
+    # Bounding Box for Tijuana, Mexico (approximates the municipality)
+    # Lat: 32.4 to 32.55 | Lon: -117.1 to -116.6
+    lat_min, lat_max = 32.40, 32.55
+    lon_min, lon_max = -117.12, -116.60
     
-    # Generate 500 mock emergency calls around the central point
+    # Generate 500 mock emergency calls within the bounding box
     num_calls = 500
     np.random.seed(42)
-    latitudes = lat_center + np.random.randn(num_calls) * 0.05
-    longitudes = lon_center + np.random.randn(num_calls) * 0.05
+    latitudes = np.random.uniform(lat_min, lat_max, num_calls)
+    longitudes = np.random.uniform(lon_min, lon_max, num_calls)
     
     # Simulate travel times
     api_time = np.random.uniform(5, 30, num_calls)
@@ -38,19 +42,21 @@ def load_data():
         'corrected_time_minutes': corrected_time
     })
     
-    # Mock Ambulance Bases
+    # Mock Ambulance Bases - Placed within Tijuana
     current_bases = pd.DataFrame({
-        'name': ['Current Base 1', 'Current Base 2', 'Current Base 3', 'Current Base 4'],
-        'lat': [32.533, 32.501, 32.48, 32.52],
-        'lon': [-117.01, -117.04, -116.95, -116.98],
-        'type': ['Current'] * 4  # <-- FIX #1: Length must be 4
+        'name': ['Current Base - Centro', 'Current Base - La Mesa', 'Current Base - Otay', 'Current Base - El Florido'],
+        'lat': [32.533, 32.515, 32.528, 32.463],
+        'lon': [-117.03, -116.98, -116.94, -116.82],
+        'type': ['Current'] * 4
     })
     
+    # Optimized bases are more spread out based on demand
+    num_optimized = 12
     optimized_bases = pd.DataFrame({
-        'name': [f'Optimized Station {i+1}' for i in range(12)],
-        'lat': lat_center + np.random.randn(12) * 0.06,
-        'lon': lon_center + np.random.randn(12) * 0.06,
-        'type': ['Optimized'] * 12 # <-- FIX #2: Length must be 12
+        'name': [f'Optimized Station {i+1}' for i in range(num_optimized)],
+        'lat': np.random.uniform(lat_min, lat_max, num_optimized),
+        'lon': np.random.uniform(lon_min, lon_max, num_optimized),
+        'type': ['Optimized'] * num_optimized
     })
 
     return calls_df, current_bases, optimized_bases
@@ -111,7 +117,6 @@ elif page == "Data & Time Correction":
     
     st.subheader("Correcting Travel Time Estimations")
     
-    # Calculate errors
     error_before = calls_df['api_time_minutes'] - calls_df['real_time_minutes']
     error_after = calls_df['corrected_time_minutes'] - calls_df['real_time_minutes']
     
@@ -119,14 +124,14 @@ elif page == "Data & Time Correction":
     with col1:
         st.markdown("**Before Correction** (API vs. Real Time)")
         fig1 = px.histogram(error_before, nbins=50, title="Error Distribution (API - Real)")
-        fig1.update_layout(showlegend=False)
+        fig1.update_layout(showlegend=False, yaxis_title="Frequency", xaxis_title="Time Error (minutes)")
         st.plotly_chart(fig1, use_container_width=True)
         st.write("The standard API consistently overestimates travel time (positive error), as it doesn't account for an ambulance's ability to bypass traffic.")
 
     with col2:
         st.markdown("**After Correction** (ML Model vs. Real Time)")
         fig2 = px.histogram(error_after, nbins=50, title="Error Distribution (Corrected - Real)")
-        fig2.update_layout(showlegend=False)
+        fig2.update_layout(showlegend=False, yaxis_title="Frequency", xaxis_title="Time Error (minutes)")
         st.plotly_chart(fig2, use_container_width=True)
         st.write("The machine learning correction model produces estimates much closer to the real travel time, with the error centered around zero.")
 
@@ -155,18 +160,14 @@ elif page == "Demand Clustering":
         title="Emergency Calls Color-Coded by Cluster"
     )
     
-    # Use a separate trace for centroids so we can customize them
-    centroid_trace = px.scatter_mapbox(
-        centroids_df,
-        lat="lat",
-        lon="lon"
-    ).data[0]
-
-    # Customize the centroid markers
-    centroid_trace.marker = {'size': 15, 'symbol': 'star', 'color': 'red'}
-    centroid_trace.name = 'Demand Hotspot'
-    
-    fig.add_trace(centroid_trace)
+    # Add a separate trace for centroids for better control
+    fig.add_scattermapbox(
+        lat=centroids_df['lat'],
+        lon=centroids_df['lon'],
+        mode='markers',
+        marker=dict(size=15, symbol='star', color='red'),
+        name='Demand Hotspot'
+    )
     
     st.plotly_chart(fig, use_container_width=True)
     st.info("The red stars ★ represent the calculated demand hotspots, which are the inputs for the location optimization model.")
@@ -196,7 +197,6 @@ elif page == "Location Optimization":
 
     with col2:
         st.subheader("Optimized vs. Current Ambulance Locations")
-        # Combine bases for plotting
         all_bases = pd.concat([current_bases, optimized_bases], ignore_index=True)
         
         fig = px.scatter_mapbox(
@@ -205,7 +205,7 @@ elif page == "Location Optimization":
             lon="lon",
             color="type",
             symbol="type",
-            mapbox_style="carto-positron",
+            mapbox_style="open-street-map",
             zoom=10,
             height=600,
             title="Comparison of Ambulance Base Locations",
