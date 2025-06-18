@@ -15,15 +15,21 @@ st.set_page_config(
 # --- Data Caching and Generation ---
 @st.cache_data
 def load_data():
-    """Generates realistic mock data constrained to the Tijuana, Mexico area."""
+    """
+    Generates realistic mock data constrained to the Tijuana, Mexico area.
+    """
+    # Bounding Box for Tijuana, Mexico (approximates the municipality)
+    # Lat: 32.4 to 32.55 | Lon: -117.1 to -116.6
     lat_min, lat_max = 32.40, 32.55
     lon_min, lon_max = -117.12, -116.60
     
+    # Generate 500 mock emergency calls within the bounding box
     num_calls = 500
     np.random.seed(42)
     latitudes = np.random.uniform(lat_min, lat_max, num_calls)
     longitudes = np.random.uniform(lon_min, lon_max, num_calls)
     
+    # Simulate travel times
     api_time = np.random.uniform(5, 30, num_calls)
     real_time = api_time * np.random.uniform(0.6, 0.95, num_calls)
     corrected_time = real_time * np.random.uniform(0.95, 1.05, num_calls)
@@ -36,6 +42,7 @@ def load_data():
         'corrected_time_minutes': corrected_time
     })
     
+    # Mock Ambulance Bases - Placed within Tijuana
     current_bases = pd.DataFrame({
         'name': ['Current Base - Centro', 'Current Base - La Mesa', 'Current Base - Otay', 'Current Base - El Florido'],
         'lat': [32.533, 32.515, 32.528, 32.463],
@@ -43,6 +50,7 @@ def load_data():
         'type': ['Current'] * 4
     })
     
+    # Optimized bases are more spread out based on demand
     num_optimized = 12
     optimized_bases = pd.DataFrame({
         'name': [f'Optimized Station {i+1}' for i in range(num_optimized)],
@@ -77,11 +85,56 @@ st.sidebar.info("Data is simulated for demonstration purposes, reflecting the co
 if page == "Thesis Overview":
     st.title("Sistema de Despacho para Ambulancias de la Ciudad de Tijuana")
     st.subheader("PhD Thesis Dashboard by M.C. Noelia Araceli Torres Cortés")
-    st.markdown("...") # Content is fine, truncated for brevity
+
+    st.markdown("""
+    This dashboard provides an interactive summary of the doctoral research aimed at optimizing the Emergency Medical Services (EMS) for the Red Cross in Tijuana, Mexico. The project addresses the critical challenge of reducing ambulance response times in a city with limited resources and complex urban conditions.
+    """)
+    
+    st.header("Core Contribution & Novelty")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.info("💡 **Travel Time Correction Model**")
+        st.write("""
+        The primary innovation is a machine learning model that corrects travel time estimations from standard APIs (like OSRM). It learns the discrepancy between API predictions and actual ambulance travel times, accounting for factors like siren usage and traffic law exemptions. This resulted in a **20% improvement in location coverage**.
+        """)
+
+    with col2:
+        st.info("🌐 **Real-World Application**")
+        st.write("""
+        Unlike studies in well-structured cities, this research tackles the 'messy' reality of a developing region. By creating a practical, data-driven solution for the Tijuana Red Cross, it bridges the gap between academic theory and on-the-ground impact. The final model uses OSRM, a free, open-source tool, making it sustainable for the organization.
+        """)
+        
+    st.header("Methodology Pipeline")
+    st.image("https://i.imgur.com/L1iF7hQ.png", caption="The research followed a comprehensive pipeline from data analysis to optimization and web tool design.")
+
 
 elif page == "Data & Time Correction":
     st.title("Data Exploration & Travel Time Correction")
-    st.markdown("...") # Content is fine, truncated for brevity
+    st.markdown("A key finding was the significant discrepancy between API-estimated travel times and the actual travel times recorded by ambulance GPS. This section visualizes this gap and the improvement made by the correction model.")
+
+    st.subheader("Map of Simulated Emergency Calls in Tijuana")
+    st.map(calls_df[['lat', 'lon']], zoom=11)
+    
+    st.subheader("Correcting Travel Time Estimations")
+    
+    # Calculate errors
+    error_before = calls_df['api_time_minutes'] - calls_df['real_time_minutes']
+    error_after = calls_df['corrected_time_minutes'] - calls_df['real_time_minutes']
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("**Before Correction** (API vs. Real Time)")
+        fig1 = px.histogram(error_before, nbins=50, title="Error Distribution (API - Real)")
+        fig1.update_layout(showlegend=False, yaxis_title="Frequency", xaxis_title="Time Error (minutes)")
+        st.plotly_chart(fig1, use_container_width=True)
+        st.write("The standard API consistently overestimates travel time (positive error), as it doesn't account for an ambulance's ability to bypass traffic.")
+
+    with col2:
+        st.markdown("**After Correction** (ML Model vs. Real Time)")
+        fig2 = px.histogram(error_after, nbins=50, title="Error Distribution (Corrected - Real)")
+        fig2.update_layout(showlegend=False, yaxis_title="Frequency", xaxis_title="Time Error (minutes)")
+        st.plotly_chart(fig2, use_container_width=True)
+        st.write("The machine learning correction model produces estimates much closer to the real travel time, with the error centered around zero.")
 
 elif page == "Demand Clustering":
     st.title("Identifying Demand Hotspots via Clustering")
@@ -89,6 +142,7 @@ elif page == "Demand Clustering":
 
     k = st.slider("Select Number of Demand Clusters (k):", min_value=5, max_value=25, value=15, step=1)
     
+    # Perform K-Means clustering
     kmeans = KMeans(n_clusters=k, random_state=42, n_init='auto')
     calls_df['cluster'] = kmeans.fit_predict(calls_df[['lat', 'lon']])
     centroids = kmeans.cluster_centers_
@@ -96,24 +150,26 @@ elif page == "Demand Clustering":
     
     st.subheader(f"Map of {k} Emergency Call Clusters")
     
-    # --- FIX #1: Use px.scatter_map instead of scatter_mapbox ---
+    # Use the modern px.scatter_map function
     fig = px.scatter_map(
         calls_df,
         lat="lat",
         lon="lon",
         color="cluster",
-        # mapbox_style is not needed; it uses OpenStreetMap by default
         zoom=10,
         height=600,
         title="Emergency Calls Color-Coded by Cluster"
     )
     
+    # Add a separate trace for the centroids to style them differently
     fig.add_scattermapbox(
         lat=centroids_df['lat'],
         lon=centroids_df['lon'],
         mode='markers',
         marker=dict(size=15, symbol='star', color='red'),
-        name='Demand Hotspot'
+        name='Demand Hotspot',
+        hoverinfo='text',
+        text=[f'Hotspot {i+1}' for i in range(len(centroids_df))]
     )
     
     st.plotly_chart(fig, use_container_width=True)
@@ -127,22 +183,32 @@ elif page == "Location Optimization":
 
     with col1:
         st.subheader("Optimization Results")
-        st.write("...") # Content is fine, truncated for brevity
-        st.metric(label="...", value="83.9%")
-        st.metric(label="...", value="100%", delta="16.1%")
+        st.write("The model significantly improved service coverage, especially after applying the travel time correction.")
+        
+        st.metric(
+            label="Double Coverage (Before Correction)", 
+            value="83.9%", 
+            help="Percentage of demand serviceable by at least two ambulances within the time threshold using standard API times."
+        )
+        st.metric(
+            label="Double Coverage (After Correction)", 
+            value="100%", 
+            delta="16.1%",
+            help="Coverage achieved using the ML-corrected travel times. The improvement is substantial."
+        )
         st.info("The map on the right shows the optimized vs. current base locations.")
 
     with col2:
         st.subheader("Optimized vs. Current Ambulance Locations")
         all_bases = pd.concat([current_bases, optimized_bases], ignore_index=True)
 
-        # --- FIX #2: Use px.scatter_map and remove the unsupported 'symbol' argument ---
+        # Use the modern px.scatter_map function
         fig = px.scatter_map(
             all_bases,
             lat="lat",
             lon="lon",
             color="type",
-            size_max=15, # Use size to differentiate if needed, as symbol is not supported
+            size_max=15, 
             zoom=10,
             height=600,
             title="Comparison of Ambulance Base Locations",
@@ -150,11 +216,9 @@ elif page == "Location Optimization":
             color_discrete_map={
                 "Current": "orange",
                 "Optimized": "green"
-            },
+            }
         )
         
-        # Manually set the symbols if desired using go.Scattermapbox
-        # For simplicity here, we rely on color and hover data.
         fig.update_layout(legend_title_text='Base Type')
         
         st.plotly_chart(fig, use_container_width=True)
