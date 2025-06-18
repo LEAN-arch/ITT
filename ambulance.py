@@ -128,8 +128,56 @@ elif page == "Data & Time Correction":
     st.map(calls_df[['lat', 'lon']], zoom=11, use_container_width=True)
     
     st.subheader("Correcting Travel Time Estimations")
-    
-    # Calculate errors
+
+    # --- NEW EXPANDER WITH MATH ---
+    with st.expander("How the Correction Model Works (The Math)"):
+        st.markdown("""
+        Instead of predicting the exact travel time (a regression problem), the thesis frames this as a **classification problem**, which is more robust. The goal is to predict which *category of error* a given trip will fall into.
+        
+        The final corrected time is calculated as:
+        """)
+        st.latex(r'''T_{Corrected} = T_{API} + \Delta_{Predicted}''')
+        st.markdown(r"""
+        Where:
+        - $T_{Corrected}$ is the final, more accurate travel time prediction.
+        - $T_{API}$ is the initial time estimated by the OSRM routing API.
+        - $\Delta_{Predicted}$ is the predicted time correction, determined by the classification model.
+        
+        #### 1. Defining the Error Classes
+        Based on the historical data, all trips were categorized into one of three classes based on the API error ($T_{API} - T_{Real}$):
+        - **MD (Medium Decrement):** Large overestimations by the API (e.g., API was > 7 minutes slower than reality).
+        - **SD (Small Decrement):** Moderate overestimations by the API (e.g., API was 2-7 minutes slower).
+        - **INCREMENT:** Small errors or underestimations (e.g., API was less than 2 minutes slower).
+        
+        #### 2. The Classification Model
+        A Random Forest model ($f$) was trained to predict the class for a new trip based on a vector of input features ($X$):
+        """)
+        st.latex(r'''Predicted\_Class = f(X)''')
+        st.markdown("The feature vector $X$ included variables such as:")
+        st.code("""
+X = [
+    API Estimated Time, 
+    Ambulance ID, 
+    Day of Week, 
+    Time of Day, 
+    Origin Latitude, 
+    Origin Longitude, 
+    Destination Latitude, 
+    Destination Longitude
+]
+        """, language='text')
+
+        st.markdown(r"""
+        #### 3. Applying the Correction
+        Once the model predicts a class, a pre-calculated correction value for that class is used. The thesis found that using the **median error** of all historical trips in a given class was a robust choice for $\Delta_{Predicted}$.
+        
+        - If `Predicted_Class` is **MD**, then $\Delta_{Predicted} = \text{Median Error of MD Class}$ (e.g., -8.5 minutes).
+        - If `Predicted_Class` is **SD**, then $\Delta_{Predicted} = \text{Median Error of SD Class}$ (e.g., -3.7 minutes).
+        
+        This multi-step process makes the system highly effective, as it corrects the raw API estimates with a data-driven, context-aware prediction before feeding them into the final optimization model.
+        """)
+
+    # Calculate errors for plotting
     error_before = calls_df['api_time_minutes'] - calls_df['real_time_minutes']
     error_after = calls_df['corrected_time_minutes'] - calls_df['real_time_minutes']
     
@@ -158,7 +206,6 @@ elif page == "Demand Clustering":
 
     k = st.slider("Select Number of Demand Clusters (k):", min_value=5, max_value=25, value=15, step=1)
     
-    # Perform K-Means clustering
     kmeans = KMeans(n_clusters=k, random_state=42, n_init='auto')
     calls_df['cluster'] = kmeans.fit_predict(calls_df[['lat', 'lon']])
     centroids = kmeans.cluster_centers_
@@ -166,7 +213,6 @@ elif page == "Demand Clustering":
     
     st.subheader(f"Map of {k} Emergency Call Clusters")
     
-    # Use the modern px.scatter_map function
     fig = px.scatter_map(
         calls_df,
         lat="lat",
@@ -177,7 +223,6 @@ elif page == "Demand Clustering":
         title="Emergency Calls Color-Coded by Cluster"
     )
     
-    # Add a separate trace for the centroids to style them differently
     fig.add_scattermapbox(
         lat=centroids_df['lat'],
         lon=centroids_df['lon'],
@@ -218,13 +263,12 @@ elif page == "Location Optimization":
         st.subheader("Optimized vs. Current Ambulance Locations")
         all_bases = pd.concat([current_bases, optimized_bases], ignore_index=True)
 
-        # Use the modern px.scatter_map function
         fig = px.scatter_map(
             all_bases,
             lat="lat",
             lon="lon",
             color="type",
-            size_max=15,
+            size_max=15, 
             zoom=10,
             height=600,
             title="Comparison of Ambulance Base Locations",
