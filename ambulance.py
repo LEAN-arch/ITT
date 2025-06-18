@@ -26,11 +26,8 @@ def load_data():
     longitudes = lon_center + np.random.randn(num_calls) * 0.05
     
     # Simulate travel times
-    # API time is a baseline
     api_time = np.random.uniform(5, 30, num_calls)
-    # Real time is usually faster due to sirens, etc.
     real_time = api_time * np.random.uniform(0.6, 0.95, num_calls)
-    # Corrected time is our ML model's prediction, much closer to real time
     corrected_time = real_time * np.random.uniform(0.95, 1.05, num_calls)
     
     calls_df = pd.DataFrame({
@@ -46,14 +43,14 @@ def load_data():
         'name': ['Current Base 1', 'Current Base 2', 'Current Base 3', 'Current Base 4'],
         'lat': [32.533, 32.501, 32.48, 32.52],
         'lon': [-117.01, -117.04, -116.95, -116.98],
-        'type': ['Current']
+        'type': ['Current'] * 4  # <-- FIX #1: Length must be 4
     })
     
     optimized_bases = pd.DataFrame({
         'name': [f'Optimized Station {i+1}' for i in range(12)],
         'lat': lat_center + np.random.randn(12) * 0.06,
         'lon': lon_center + np.random.randn(12) * 0.06,
-        'type': ['Optimized']
+        'type': ['Optimized'] * 12 # <-- FIX #2: Length must be 12
     })
 
     return calls_df, current_bases, optimized_bases
@@ -158,15 +155,18 @@ elif page == "Demand Clustering":
         title="Emergency Calls Color-Coded by Cluster"
     )
     
-    fig.add_trace(px.scatter_mapbox(
+    # Use a separate trace for centroids so we can customize them
+    centroid_trace = px.scatter_mapbox(
         centroids_df,
         lat="lat",
         lon="lon"
-    ).data[0])
+    ).data[0]
+
+    # Customize the centroid markers
+    centroid_trace.marker = {'size': 15, 'symbol': 'star', 'color': 'red'}
+    centroid_trace.name = 'Demand Hotspot'
     
-    # Update marker for centroids
-    fig.data[k].marker = {'size': 15, 'symbol': 'star', 'color': 'red'}
-    fig.data[k].name = 'Demand Hotspot'
+    fig.add_trace(centroid_trace)
     
     st.plotly_chart(fig, use_container_width=True)
     st.info("The red stars ★ represent the calculated demand hotspots, which are the inputs for the location optimization model.")
@@ -175,13 +175,12 @@ elif page == "Location Optimization":
     st.title("Ambulance Location Optimization")
     st.markdown("Using the demand hotspots and corrected travel times, the Robust Double Standard Model (RDSM) was used to find the optimal locations for ambulances to maximize coverage across the city.")
 
-    col1, col2 = st.columns([1, 2])
+    col1, col2 = st.columns(2)
     
     with col1:
         st.subheader("Optimization Results")
         st.write("The model significantly improved service coverage, especially after applying the travel time correction.")
         
-        # Display metrics
         st.metric(
             label="Double Coverage (Before Correction)", 
             value="83.9%", 
@@ -193,28 +192,26 @@ elif page == "Location Optimization":
             delta="16.1%",
             help="Coverage achieved using the ML-corrected travel times. The improvement is substantial."
         )
-        st.warning("Click the button to see the optimized locations on the map.")
+        st.info("The map on the right shows the optimized vs. current base locations.")
 
     with col2:
         st.subheader("Optimized vs. Current Ambulance Locations")
-        if st.button('📍 Show Optimized Locations'):
-            # Combine bases for plotting
-            all_bases = pd.concat([current_bases, optimized_bases], ignore_index=True)
-            
-            fig = px.scatter_mapbox(
-                all_bases,
-                lat="lat",
-                lon="lon",
-                color="type",
-                symbol="type",
-                mapbox_style="carto-positron",
-                zoom=10,
-                height=600,
-                title="Comparison of Ambulance Base Locations",
-                hover_name="name",
-                hover_data={"type": True, "lat": False, "lon": False}
-            )
-            fig.update_layout(legend_title_text='Base Type')
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("The map will display after you click the button.")
+        # Combine bases for plotting
+        all_bases = pd.concat([current_bases, optimized_bases], ignore_index=True)
+        
+        fig = px.scatter_mapbox(
+            all_bases,
+            lat="lat",
+            lon="lon",
+            color="type",
+            symbol="type",
+            mapbox_style="carto-positron",
+            zoom=10,
+            height=600,
+            title="Comparison of Ambulance Base Locations",
+            hover_name="name",
+            color_discrete_map={"Current": "orange", "Optimized": "green"},
+            hover_data={"type": True, "lat": False, "lon": False}
+        )
+        fig.update_layout(legend_title_text='Base Type')
+        st.plotly_chart(fig, use_container_width=True)
