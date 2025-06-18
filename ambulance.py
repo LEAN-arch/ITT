@@ -19,7 +19,6 @@ def load_data():
     Generates realistic mock data constrained to the Tijuana, Mexico area.
     """
     # Bounding Box for Tijuana, Mexico (approximates the municipality)
-    # Lat: 32.4 to 32.55 | Lon: -117.1 to -116.6
     lat_min, lat_max = 32.40, 32.55
     lon_min, lon_max = -117.12, -116.60
     
@@ -105,15 +104,28 @@ if page == "Thesis Overview":
         """)
         
     st.header("Methodology Pipeline")
-    st.image("https://i.imgur.com/L1iF7hQ.png", caption="The research followed a comprehensive pipeline from data analysis to optimization and web tool design.")
-
+    st.markdown("""
+    The research followed a comprehensive, multi-stage methodology to move from raw data to an actionable solution. Each step built upon the last, ensuring the final recommendations were robust and data-driven:
+    
+    1.  **Data Analysis & Filtering:** The process began by collecting and cleaning historical emergency call records (FRAP) and ambulance GPS logs. This crucial first step involved handling missing data, filtering inconsistencies, and creating a unified, reliable dataset.
+    
+    2.  **Travel Time Correction:** A machine learning model (Random Forest) was developed to predict the error between standard API travel times (OSRM) and actual ambulance travel times. This correction is the core novelty, making all subsequent calculations more realistic.
+    
+    3.  **Demand Clustering:** Historical emergency call locations were grouped using the K-Means clustering algorithm. The center of each cluster was identified as a "demand point," representing a statistical hotspot for incidents.
+    
+    4.  **Location Optimization:** Using the demand points and corrected travel times as inputs, an optimization model (Robust Double Standard Model - RDSM) was executed. This model determined the optimal strategic locations for ambulances to be stationed throughout the day to maximize the probability of covering any incident with at least two units within a critical time window.
+    
+    5.  **Web-Based Tool Design:** Finally, the entire pipeline was integrated into the design of a web-based decision-support tool, allowing dispatchers to interact with the findings and run simulations, as demonstrated by this dashboard.
+    """)
 
 elif page == "Data & Time Correction":
     st.title("Data Exploration & Travel Time Correction")
-    st.markdown("A key finding was the significant discrepancy between API-estimated travel times and the actual travel times recorded by ambulance GPS. This section visualizes this gap and the improvement made by the correction model.")
+    st.markdown("""
+    A foundational challenge in optimizing ambulance dispatch is accurately predicting how long it will take for an ambulance to reach an incident. Standard routing APIs, like Google Maps or OSRM, are designed for civilian vehicles and do not account for the unique operational advantages of an emergency vehicle. This section visualizes this critical discrepancy and the effectiveness of the thesis's proposed correction model.
+    """)
 
     st.subheader("Map of Simulated Emergency Calls in Tijuana")
-    st.map(calls_df[['lat', 'lon']], zoom=11)
+    st.map(calls_df[['lat', 'lon']], zoom=11, use_container_width=True)
     
     st.subheader("Correcting Travel Time Estimations")
     
@@ -127,14 +139,18 @@ elif page == "Data & Time Correction":
         fig1 = px.histogram(error_before, nbins=50, title="Error Distribution (API - Real)")
         fig1.update_layout(showlegend=False, yaxis_title="Frequency", xaxis_title="Time Error (minutes)")
         st.plotly_chart(fig1, use_container_width=True)
-        st.write("The standard API consistently overestimates travel time (positive error), as it doesn't account for an ambulance's ability to bypass traffic.")
+        st.write("""
+        This chart shows the error distribution when comparing the travel time estimated by a standard API to the actual time it took an ambulance to travel, based on GPS data. The vast majority of the bars are on the positive side of zero, indicating that the **API consistently overestimates the travel time**. This "optimism gap" occurs because the API calculates routes for regular traffic, while an ambulance with sirens can often bypass congestion, take more direct routes, and exceed normal speed limits. Relying on these uncorrected, overly pessimistic estimates leads to suboptimal placement of ambulances, as the system believes it takes longer to cover distances than it actually does.
+        """)
 
     with col2:
         st.markdown("**After Correction** (ML Model vs. Real Time)")
         fig2 = px.histogram(error_after, nbins=50, title="Error Distribution (Corrected - Real)")
         fig2.update_layout(showlegend=False, yaxis_title="Frequency", xaxis_title="Time Error (minutes)")
         st.plotly_chart(fig2, use_container_width=True)
-        st.write("The machine learning correction model produces estimates much closer to the real travel time, with the error centered around zero.")
+        st.write("""
+        This chart displays the error distribution after applying the machine learning correction model developed in the thesis. The model was trained on historical data to predict the *discrepancy* between the API and reality. As shown, the error distribution is now tightly centered around zero. This demonstrates that the model successfully learns the unique travel characteristics of Tijuana's ambulances, producing far more accurate and reliable travel time predictions. This accuracy is the cornerstone of the subsequent location optimization, enabling the system to place ambulances more effectively and ultimately improve city-wide coverage by over 20%.
+        """)
 
 elif page == "Demand Clustering":
     st.title("Identifying Demand Hotspots via Clustering")
@@ -208,7 +224,7 @@ elif page == "Location Optimization":
             lat="lat",
             lon="lon",
             color="type",
-            size_max=15, 
+            size_max=15,
             zoom=10,
             height=600,
             title="Comparison of Ambulance Base Locations",
